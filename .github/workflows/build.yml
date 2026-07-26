@@ -1,0 +1,51 @@
+name: Build APK
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get the repo
+        uses: actions/checkout@v4
+
+      - name: Unpack the project zip
+        run: |
+          ZIP=$(ls *.zip 2>/dev/null | head -1)
+          if [ -z "$ZIP" ]; then
+            echo "No .zip found at the top of the repo."
+            exit 1
+          fi
+          unzip -q "$ZIP"
+          SETTINGS=$(find . -name settings.gradle.kts -not -path "./.git/*" | head -1)
+          if [ -z "$SETTINGS" ]; then
+            echo "Unpacked, but no settings.gradle.kts inside."
+            exit 1
+          fi
+          echo "PROJECT=$(dirname "$SETTINGS")" >> $GITHUB_ENV
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Build the debug APK
+        working-directory: ${{ env.PROJECT }}
+        run: |
+          gradle wrapper --gradle-version 8.9
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: chalkboard-apk
+          path: ${{ env.PROJECT }}/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: error
